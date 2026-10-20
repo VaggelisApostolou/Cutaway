@@ -8,3 +8,4 @@ data/*.jsonl
 node_modules/
 web/dist/
 out/
+.cache/

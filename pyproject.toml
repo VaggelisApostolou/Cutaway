@@ -11,6 +11,10 @@ dependencies = [
     "pydantic>=2.7",
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
+    "agent-framework-core>=1.22",
+    "agent-framework-openai>=1.17",
+    "openai>=1.60",
+    "truststore>=0.10",
 ]
 
 [project.optional-dependencies]

@@ -10,6 +10,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
+from cutaway.agents import Persona, Producer, ReelSpec
 from cutaway.analytics.insights import summarize
 from cutaway.engine import Match, simulate_match
 
@@ -17,6 +18,7 @@ app = FastAPI(title="Cutaway API", version="0.1.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 MAX_SEED = 10_000
+producer = Producer()
 
 
 @lru_cache(maxsize=32)
@@ -76,3 +78,9 @@ async def stream(seed: int, speed: float = 20.0) -> StreamingResponse:
         yield "event: end\ndata: {}\n\n"
 
     return StreamingResponse(gen(), media_type="text/event-stream")
+
+
+@app.post("/api/matches/{seed}/reels")
+async def create_reel(seed: int, persona: Persona) -> ReelSpec:
+    """Run the agent crew and return a verified, personalised reel spec."""
+    return await producer.produce(get_match(seed), persona)
