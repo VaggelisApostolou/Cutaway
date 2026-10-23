@@ -3,10 +3,10 @@
 Providers, picked by ``CUTAWAY_LLM_PROVIDER`` (default ``auto``):
 
 * ``azure``   Microsoft Foundry / Azure OpenAI deployment (AZURE_OPENAI_ENDPOINT + key)
-* ``github``  GitHub Models, free and rate limited (GITHUB_TOKEN)
+* ``gemini``  Google Gemini API free tier via its OpenAI-compatible endpoint (GEMINI_API_KEY)
 * ``offline`` no model calls; agents fall back to deterministic logic
 
-``auto`` uses azure when configured, then github, then offline. Every model answer is
+``auto`` uses azure when configured, then gemini, then offline. Every model answer is
 cached on disk, so the same request never costs a second call.
 """
 
@@ -27,7 +27,8 @@ log = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parents[3]
 CACHE_DIR = ROOT / ".cache" / "llm"
-GITHUB_MODELS_URL = "https://models.github.ai/inference"
+GEMINI_OPENAI_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+RATE_LIMIT_RETRIES = 4
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -56,14 +57,14 @@ class LLMSettings:
         if provider == "auto":
             if os.getenv("AZURE_OPENAI_ENDPOINT") and os.getenv("AZURE_OPENAI_API_KEY"):
                 provider = "azure"
-            elif os.getenv("GITHUB_TOKEN"):
-                provider = "github"
+            elif os.getenv("GEMINI_API_KEY"):
+                provider = "gemini"
             else:
                 provider = "offline"
         if provider == "azure":
             model = os.getenv("AZURE_OPENAI_CHAT_DEPLOYMENT_NAME", "gpt-5.4-mini")
-        elif provider == "github":
-            model = os.getenv("GITHUB_MODELS_MODEL", "openai/gpt-4.1-mini")
+        elif provider == "gemini":
+            model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
         else:
             model = "offline"
         return cls(provider, model)
@@ -88,7 +89,7 @@ def _chat_client(settings: LLMSettings):
             api_version=os.getenv("AZURE_OPENAI_API_VERSION", "2025-04-01-preview"),
         )
     return OpenAIChatCompletionClient(
-        model=settings.model, api_key=os.environ["GITHUB_TOKEN"], base_url=GITHUB_MODELS_URL,
+        model=settings.model, api_key=os.environ["GEMINI_API_KEY"], base_url=GEMINI_OPENAI_URL,
     )
 
 
@@ -127,7 +128,17 @@ class LLM:
         options: dict = {"response_format": schema}
         if "gpt-5" not in self.settings.model and "/o" not in self.settings.model:
             options["temperature"] = 0.4  # reasoning models reject temperature
-        response = await agent.run(prompt, options=options)
+        for attempt in range(RATE_LIMIT_RETRIES + 1):
+            try:
+                response = await agent.run(prompt, options=options)
+                break
+            except Exception as exc:  # free tiers answer 429 when the per-minute quota is used up
+                text = str(exc)
+                if attempt == RATE_LIMIT_RETRIES or not ("429" in text or "RESOURCE_EXHAUSTED" in text):
+                    raise
+                wait = 15 * (attempt + 1)
+                log.warning("agent %s rate limited, retrying in %ss", name, wait)
+                await asyncio.sleep(wait)
         self.calls += 1
         value = response.value
         if value is None:

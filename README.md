@@ -33,7 +33,7 @@ Built for the *Inside the Game: Developer Hackathon* (Microsoft x Premier League
 | Scriptwriter | LLM (Microsoft Agent Framework) | Writes narration in the viewer's language, tone and mode, using only verified facts |
 | Verifier | code | Rejects any number not in the facts and any line over its word budget; sends exact problems back to the Scriptwriter, then falls back to a safe template |
 
-Models run through Microsoft Foundry (Azure OpenAI) or GitHub Models, chosen in `.env`.
+Models run through Microsoft Foundry (Azure OpenAI) or the Gemini API (OpenAI-compatible endpoint), chosen in `.env`.
 Every answer is cached, and with no model configured the crew runs deterministic fallbacks,
 so the pipeline always produces a verified reel.
 
